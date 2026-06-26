@@ -1,0 +1,22 @@
+---
+- name: Vérification de la présence de curl
+  ansible.builtin.package:
+    name: curl
+    state: present
+
+- name: Déploiement du script ntfy
+  ansible.builtin.template:
+    src: ntfy-action.sh.j2
+    dest: /etc/fail2ban/action.d/ntfy.sh
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Déploiement de l'action fail2ban ntfy
+  ansible.builtin.template:
+    src: ntfy-action.conf.j2
+    dest: /etc/fail2ban/action.d/ntfy.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart fail2ban

@@ -1,0 +1,25 @@
+---
+# === SSH ===
+ssh_port: 2222
+
+# === Fail2ban ===
+fail2ban_bantime: 3600
+fail2ban_findtime: 600
+fail2ban_maxretry: 5
+
+# === Notifications Mail ===
+notifications_mail_enabled: false
+notifications_mail_smtp_host: "smtp.example.com"
+notifications_mail_smtp_port: 587
+notifications_mail_smtp_user: "user@example.com"
+notifications_mail_smtp_password: "changeme"
+notifications_mail_smtp_tls: true
+notifications_mail_from: "fail2ban@monserveur.com"
+notifications_mail_to: "admin@example.com"
+
+# === Notifications ntfy ===
+notifications_ntfy_enabled: false
+notifications_ntfy_url: "https://ntfy.sh"
+notifications_ntfy_topic: "mon-serveur-alerts"
+notifications_ntfy_token: ""
+notifications_ntfy_priority: "high"

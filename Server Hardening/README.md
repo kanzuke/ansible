@@ -1,495 +1,358 @@
-# 🔒 Playbook Ansible - Sécurisation SSH
+# 🛡️ ansible-ssh-security
 
-[![Playbook Status](https://img.shields.io/badge/Ansible-≥%202.12-green?style=flat-square&logo=ansible)](https://docs.ansible.com/)
-[![Licence](https://img.shields.io/badge/Licence-MIT-blue?style=flat-square)](LICENSE)
-![Support](https://img.shields.io/badge/Support-Debian%20|%20AlmaLinux%20|%20Ubuntu%20|%20Rocky%20|%20CentOS-orange?style=flat-square&logo=linux)
+> Playbook Ansible pour durcir SSH et surveiller les tentatives d'accès non autorisées sur Debian / AlmaLinux.
 
-> Automatisez la sécurisation de vos serveurs SSH avec ce playbook Ansible. Modification du port par défaut, désactivation du tunneling/forwarding X11, et déploiement de Fail2ban.
+[![Ansible](https://img.shields.io/badge/Ansible-2.12+-EE0000?style=flat-square&logo=ansible&logoColor=white)](https://docs.ansible.com/)
+[![Debian](https://img.shields.io/badge/Debian-12-AA0033?style=flat-square&logo=debian&logoColor=white)](https://www.debian.org/)
+[![AlmaLinux](https://img.shields.io/badge/AlmaLinux-9-0F3D5B?style=flat-square&logo=almalinux&logoColor=white)](https://almalinux.org/)
+[![MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](https://opensource.org/licenses/MIT)
 
 ---
 
-## 📋 Table des matières
+## 📖 Table des matières
 
-- [Description](#-description)
-- [✨ Fonctionnalités](#-fonctionnalités)
-- [📌 Prérequis](#-prérequis)
-- [📁 Structure du projet](#-structure-du-projet)
-- [🚀 Installation](#-installation)
-- [⚙️ Configuration](#️-configuration)
-- [📖 Utilisation](#-utilisation)
-- [🔄 Workflow du playbook](#-workflow-du-playbook)
-- [🐧 Comportement par distribution](#-comportement-par-distribution)
-- [⚠️ Sécurité - Notes importantes](#️-sécurité---notes-importantes)
-- [🔧 Dépannage](#-dépannage)
+- [🛡️ ansible-ssh-security](#-ansible-ssh-security)
+- [📖 Table des matières](#-table-des-matières)
+- [🚀 Fonctionnalités](#-fonctionnalités)
+  - [🔐 Rôle SSH — Durcissement](#-rôle-ssh--durcissement)
+  - [🚫 Rôle Fail2ban — Protection brute-force](#-rôle-fail2ban--protection-brute-force)
+  - [📧 Notifications (optionnelles)](#-notifications-optionnelles)
+- [📂 Arborescence](#-arborescence)
+- [🛠 Prérequis](#-prérequis)
+- [🚀 Installation rapide](#-installation-rapide)
+- [📋 Variables disponibles](#-variables-disponibles)
+  - [Configuration SSH](#-configuration-ssh)
+  - [Configuration Fail2ban](#configuration-fail2ban)
+  - [Notifications Mail (msmtp)](#notifications-mail-msmtp)
+  - [Notifications Ntfy](#notifications-ntfy)
+- [⚡ Utilisation](#-utilisation)
+  - [Syntaxe only (pas d'exécution)](#syntaxe-only-pas- dexécution)
+  - [Mode simulation (dry-run)](#mode-simulation-dry-run)
+  - [Exécution classique](#exécution-classique)
+  - [Avec notifications mail](#avec-notifications-mail)
+  - [Avec notifications ntfy](#avec-notifications-ntfy)
+  - [Les deuxnotifications simultanément](#les-deux-notifications-simultanément)
+- [🔒 Gestion des secrets (ansible-vault)](#-gestion-des-secrets-ansible-vault)
+- [⚠️ Points de vigilance](#️-points-de-vigilance)
+- [🤝 Contribuer \& Tester](#-contribuer--tester)
 - [📄 Licence](#-licence)
 
 ---
 
-## 📖 Description
+## 🚀 Fonctionnalités
 
-Ce playbook Ansible permet de sécuriser automatiquement un serveur SSH sur les distributions Linux **Debian** et **AlmaLinux** (et dérivées). Il est conçu pour être exécuté en **localhost** et apply les meilleures pratiques de sécurité :
+### 🔐 Rôle SSH — Durcissement
 
-- ✏️ **Changement du port SSH** par défaut (22 → personnalisé)
-- 🚫 **Désactivation** du X11 Forwarding, TCP Forwarding, Agent Forwarding et tunneling
-- 🛡️ **Installation et configuration de Fail2ban** pour contrer les attaques par force brute
+| Fonctionnalité | Détail |
+|---|---|
+| **Port personnalisé** | Déplacement du port SSH par défaut (2222) pour réduire les scans automatisés |
+| **Désactivation du forwarding** | TCP, X11, Agent forwarding désactivés |
+| **Authentification** | Root login interdit, connexion par clé uniquement recommandée |
+| **Validation** | Vérification de la config via `sshd -t` avant application |
+| **Firewall auto** | Configuration automatique : UFW (Debian) / firewalld (AlmaLinux) |
 
-> **💡 Compatible localhost** : Ce playbook est conçu pour sécuriser directement la machine sur laquelle il est exécuté, sans nécessiter d'inventaire distant.
+### 🚫 Rôle Fail2ban — Protection brute-force
 
----
+| Fonctionnalité | Détail |
+|---|---|
+| **Installation** | Fail2ban installé et activé au démarrage |
+| **Jail SSH** | Protection contre les attaques brute-force sur SSH |
+| **Paramètres ajustables** | Bantime, findtime, maxretry configurables |
+| **Backend adaptatif** | Auto (Debian) / systemd (AlmaLinux) |
 
-## ✨ Fonctionnalités
+### 📧 Notifications (optionnelles)
 
-| Fonctionnalité | Description |
-|----------------|-------------|
-| 🔢 **Changement de port SSH** | Modifie le port par défaut (22) vers un port personnalisé (par défaut : 2222) |
-| 🚫 **Désactivation X11 Forwarding** | Empêche le forwarding graphique à distance |
-| 🚫 **Désactivation TCP Forwarding** | Bloque le tunneling TCP via SSH |
-| 🚫 **Désactivation Agent Forwarding** | Désactive le forwarding d'agent SSH |
-| 🚫 **Désactivation Tunneling** | Empêche la création de tunnels VPN via SSH |
-| 🛡️ **Fail2ban** | Installe et configure Fail2ban avec des règles sshd personnalisées |
-| 💾 **Backup automatique** | Sauvegarde la configuration SSH avant modification |
-| ✅ **Validation** | Valide la configuration SSH avant application (`sshd -t`) |
-| 🔥 **Firewall** | Configure firewalld sur RHEL/AlmaLinux automatiquement |
-| 🔐 **SELinux** | Configure les ports SELinux sur les systèmes RHEL |
-| 🧪 **Vérifications** | Teste l'ouverture du port et le bon fonctionnement des services |
+| Méthode | Description |
+|---|---|
+| **📧 Mail (msmtp)** | Envoi d'emails via SMTP (Gmail, SMTP provider, etc.) |
+| **📱 Ntfy** | Notifications push vers un topic [ntfy.sh](https://ntfy.sh/) auto-hébergé ou cloud |
 
----
-
-## 📌 Prérequis
-
-### 🖥️ Système
-
-| Composant | Exigence |
-|-----------|----------|
-| **Système d'exploitation** | Debian 10+, Ubuntu 18.04+, AlmaLinux 8+, Rocky 8+, CentOS 8+, RedHat 8+ |
-| **Python** | Python 3.x installé sur la machine cible |
-| **Accès root** | Possibilité d'utiliser `become: true` (sudo) |
-| **Connectivité** | Accès réseau pour installation des paquets |
-
-### 🛠️ Ansible
-
-| Composant | Version minimum |
-|-----------|-----------------|
-| **Ansible** | 2.12+ |
-| **Python** | 3.6+ |
-
-### 📦 Collections Ansible requise
-
-| Collection | Commande d'installation |
-|------------|--------------------------|
-| `community.general` | `ansible-galaxy collection install community.general` |
-| `ansible.posix` | `ansible-galaxy collection install ansible.posix` |
+> 💡 Les deux systèmes peuvent être activés simultanément ou indépendamment.
 
 ---
 
-## 📁 Structure du projet
+## 📂 Arborescence
 
 ```
 ansible-ssh-security/
-├── playbook.yml              # Playbook principal
-├── vars/
-│   └── main.yml             # Variables de configuration
-└── templates/
-    ├── sshd_config.j2       # Template de configuration SSH
-    └── jail.local.j2        # Template de configuration Fail2ban
+├── playbook.yml                  # Point d'entrée
+├── inventory.ini                 # Inventaire localhost
+├── README.md                     # Ce fichier
+├── defaults/
+│   └── main.yml                  # Variables par défaut (tout est là)
+├── group_vars/
+│   └── all.yml                   # Variables de groupe (surchargez vos secrets ici)
+└── roles/
+    ├── ssh/
+    │   ├── tasks/
+    │   │   └── main.yml          # Tâches SSH
+    │   ├── templates/
+    │   │   └── sshd_config.j2    # Template config SSHD
+    │   └── handlers/
+    │       └── main.yml          # Handler restart sshd
+    └── fail2ban/
+        ├── tasks/
+        │   ├── main.yml          # Tâches principales fail2ban
+        │   ├── mail.yml          # Installation & config msmtp
+        │   └── ntfy.yml          # Installation & config ntfy
+        ├── templates/
+        │   ├── jail.local.j2     # Configuration jail fail2ban
+        │   ├── msmtprc.j2        # Config msmtp (SMTP)
+        │   ├── ntfy-action.conf.j2  # Action fail2ban ntfy
+        │   └── ntfy-action.sh.j2    # Script notification ntfy
+        └── handlers/
+            └── main.yml          # Handler restart fail2ban
 ```
-
-```
-ansible-ssh-security/
-├── playbook.yml          # ⭐ Playbook principal (point d'entrée)
-├── vars/
-│   └── main.yml         # ⚙️ Variables de configuration (à adapter)
-└── templates/
-    ├── sshd_config.j2   # 🔧 Template configuration SSH
-    └── jail.local.j2    # 🔧 Template configuration Fail2ban
-```
-
-| Fichier | Rôle |
-|---------|------|
-| `playbook.yml` | Orchestration principale des tâches |
-| `vars/main.yml` | Variables centralisées (port, paramètres fail2ban) |
-| `templates/sshd_config.j2` | Configuration SSH sécurisée (Jinja2) |
-| `templates/jail.local.j2` | Configuration Fail2ban (Jinja2) |
 
 ---
 
-## 🚀 Installation
+## 🛠 Prérequis
 
-### 1. Cloner ou télécharger le projet
+| Outil | Version | Rôle |
+|---|---|---|
+| **Python 3** | 3.8+ | Interpréteur côté contrôle |
+| **Ansible** | 2.12+ | Moteur d'exécution |
+| **Collections** | — | `ansible.posix`, `community.general` |
+| **Accès sudo** | — | root ou sudo sur la machine cible |
+
+### Distributions supportées
+
+- ✅ **Debian** 12 (Bookworm)
+- ✅ **AlmaLinux** 9.x
+- ✅ Compatible **Ubuntu** (grâce aux tâches conditionnelles)
+
+---
+
+## 🚀 Installation rapide
 
 ```bash
-git clone https://github.com/votre-repo/ansible-ssh-security.git
+# 1. Cloner / télécharger le playbook
 cd ansible-ssh-security
-```
 
-### 2. Installer Ansible (si nécessaire)
+# 2. Installer Ansible et les dépendances
+python3 -m pip install --upgrade ansible ansible-lint
 
-```bash
-# Via pip
-pip install ansible
+ansible-galaxy collection install ansible.posix community.general
 
-# Via apt (Debian/Ubuntu)
-sudo apt update
-sudo apt install ansible
-
-# Via dnf (AlmaLinux/RHEL)
-sudo dnf install ansible
-```
-
-### 3. Installer les collections requises
-
-```bash
-ansible-galaxy collection install community.general
-ansible-galaxy collection install ansible.posix
-```
-
-> ⚠️ **Note** : Les collections doivent être installées dans `~/.ansible/collections/ansible_collections/` ou dans le répertoire du projet.
-
----
-
-## ⚙️ Configuration
-
-Toutes les variables sont définies dans [`vars/main.yml`](vars/main.yml).
-
-### Variables de configuration SSH
-
-| Variable | Valeur par défaut | Description |
-|----------|-------------------|-------------|
-| `ssh_port` | `2222` | Nouveau port SSH (n'utilisez pas un port déjà utilisé) |
-| `ssh_address` | `"0.0.0.0"` | Adresse d'écoute SSH |
-
-### Variables de configuration Fail2ban
-
-| Variable | Valeur par défaut | Description |
-|----------|-------------------|-------------|
-| `fail2ban_bantime` | `3600` | Durée du ban en secondes (1 heure) |
-| `fail2ban_findtime` | `600` | Fenêtre de détection en secondes (10 minutes) |
-| `fail2ban_maxretry` | `5` | Nombre maximum de tentatives avant ban |
-| `fail2ban_ignoreip` | `["127.0.0.1/8", "::1"]` | IPs à ne jamais bannir |
-
-### Exemple de personnalisation
-
-```yaml
-# vars/main.yml
----
-ssh_port: 2244                    # Port SSH personnalisé
-fail2ban_bantime: 86400          # Ban de 24 heures
-fail2ban_findtime: 300           # Fenêtre de 5 minutes
-fail2ban_maxretry: 3             # Max 3 tentatives
-fail2ban_ignoreip:
-  - "127.0.0.1/8"
-  - "::1"
-  - "192.168.1.0/24"             # Votre réseau local
+# 3. Vérifier l'installation
+ansible --version
 ```
 
 ---
 
-## 📖 Utilisation
+## 📋 Variables disponibles
 
-### Syntaxe de base
+### Configuration SSH
+
+| Variable | Défaut | Description |
+|---|---|---|
+| `ssh_port` | `2222` | Port SSH alternatif |
+| `ssh_permit_root_login` | `"no"` | Interdire connexion root |
+| `ssh_password_authentication` | `"no"` | Interdire auth par mot de passe |
+| `ssh_pubkey_authentication` | `"yes"` | Authentification par clé |
+| `ssh_tcp_forwarding` | `"no"` | Désactiver le tunneling TCP |
+| `ssh_x11_forwarding` | `"no"` | Désactiver le renvoi X11 |
+| `ssh_agent_forwarding` | `"no"` | Désactiver l'agent forwarding |
+
+### Configuration Fail2ban
+
+| Variable | Défaut | Description |
+|---|---|---|
+| `fail2ban_bantime` | `3600` | Durée du ban (secondes) |
+| `fail2ban_findtime` | `600` | Fenêtre de détection (secondes) |
+| `fail2ban_maxretry` | `5` | Nombre max de tentatives |
+
+### Notifications Mail (msmtp)
+
+| Variable | Défaut | Description |
+|---|---|---|
+| `notifications_mail_enabled` | `false` | Activer les notifications mail |
+| `notifications_mail_smtp_host` | _(vide)_ | Hôte SMTP (ex: `smtp.gmail.com`) |
+| `notifications_mail_smtp_port` | `587` | Port SMTP (TLS) |
+| `notifications_mail_smtp_user` | _(vide)_ | Utilisateur SMTP |
+| `notifications_mail_smtp_password` | _(vide)_ | Mot de passe SMTP (**utiliser vault!**) |
+| `notifications_mail_smtp_tls` | `true` | Activer TLS |
+| `notifications_mail_from` | _(vide)_ | Adresse expéditeur |
+| `notifications_mail_to` | _(vide)_ | Adresse destinataire |
+
+### Notifications Ntfy
+
+| Variable | Défaut | Description |
+|---|---|---|
+| `notifications_ntfy_enabled` | `false` | Activer les notifications ntfy |
+| `notifications_ntfy_url` | `https://ntfy.sh` | URL du serveur ntfy |
+| `notifications_ntfy_topic` | _(vide)_ | Nom du topic (ex: `mon-serveur-alerts`) |
+| `notifications_ntfy_token` | _(vide)_ | Token d'accès (optionnel, requis si topic privé) |
+| `notifications_ntfy_priority` | `high` | Priorité du message |
+| `notifications_ntfy_tags` | `warning` | Tags emoji (ex: `warning`, `no_entry`) |
+
+---
+
+## ⚡ Utilisation
+
+### Syntaxe only (pas d'exécution)
 
 ```bash
-# Vérifier la syntaxe du playbook
 ansible-playbook playbook.yml --syntax-check
 ```
 
-### Mode "dry-run" (check)
+### Mode simulation (dry-run)
 
 ```bash
-# Tester sans appliquer les changements
-ansible-playbook playbook.yml --check --diff
+ansible-playbook playbook.yml --check
 ```
 
-> 💡 **Astuce** : Utilisez `--check --diff` pour prévisualiser les modifications avant de les appliquer.
-
-### Exécution normale
+### Exécution classique
 
 ```bash
-# Exécuter le playbook (applique toutes les tâches)
+# Configuration SSH + fail2ban basique
 ansible-playbook playbook.yml
 ```
 
-### Avec variables personnalisées
+### Avec notifications mail
 
 ```bash
-# Changer le port SSH via ligne de commande
-ansible-playbook playbook.yml -e "ssh_port=2244"
-
-# Combiner plusieurs variables
-ansible-playbook playbook.yml -e "ssh_port=2244" -e "fail2ban_bantime=7200"
-
-# Lister toutes les tâches avant exécution
-ansible-playbook playbook.yml --list-tasks
-```
-
-### Exemples concrets
-
-```bash
-# === Exemple 1 : Exécution standard ===
-ansible-playbook playbook.yml
-
-# === Exemple 2 : Test préliminaire ===
-ansible-playbook playbook.yml --check --diff
-
-# === Exemple 3 : Port SSH personnalisé ===
-ansible-playbook playbook.yml -e "ssh_port=2244"
-
-# === Exemple 4 : Protection renforcée ===
 ansible-playbook playbook.yml \
-  -e "fail2ban_bantime=86400" \
-  -e "fail2ban_maxretry=3"
-
-# === Exemple 5 : Liste des tâches ===
-ansible-playbook playbook.yml --list-tasks
+  -e "notifications_mail_enabled=true" \
+  -e "notifications_mail_smtp_host=smtp.gmail.com" \
+  -e "notifications_mail_smtp_user=moi@gmail.com" \
+  -e "notifications_mail_smtp_password='motdepasseapp'" \
+  -e "notifications_mail_from=moi@gmail.com" \
+  -e "notifications_mail_to=alertes@mon-domaine.com"
 ```
 
----
+> ⚠️ **Ne jamais mettre de mot de passe en clair sur la ligne de commande** — voir la section [ansible-vault](#-gestion-des-secrets-ansible-vault).
 
-## 🔄 Workflow du playbook
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     WORKFLOW DU PLAYBOOK                        │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  1️⃣  PRÉ-TÂCHES                                                │
-│  • Affichage des variables de configuration                     │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  2️⃣  MISE À JOUR DES PAQUETS                                  │
-│  • apt update + upgrade (Debian)                                │
-│  • dnf update (RHEL/AlmaLinux)                                  │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  3️⃣  SAUVEGARDE SSH                                           │
-│  • Création du répertoire /backup/ssh                          │
-│  • Copie de /etc/ssh/sshd_config → /backup/ssh/                │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  4️⃣  CONFIGURATION SSH                                        │
-│  • Déploiement du template sshd_config.j2                       │
-│  • Validation avec sshd -t                                      │
-│  • Déclenchement du handler "Restart SSH"                       │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  5️⃣  FIREWALL (RHEL uniquement)                               │
-│  • Installation de firewalld                                    │
-│  • Démarrage et activation du service                            │
-│  • Ouverture du port SSH personnalisé                           │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  6️⃣  SELINUX (RHEL uniquement)                                │
-│  • Configuration du port SSH avec semanage                      │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  7️⃣  INSTALLATION FAIL2BAN                                    │
-│  • Installation du package fail2ban                             │
-│  • Déploiement du template jail.local.j2                        │
-│  • Déclenchement du handler "Restart Fail2ban"                   │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  8️⃣  VÉRIFICATIONS FINALES                                   │
-│  • Vérification du port SSH à l'écoute                         │
-│  • Vérification du statut Fail2ban                             │
-│  • Affichage du résumé de configuration                         │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  ✅ PLAYBOOK TERMINÉ                                          │
-│  • Affichage du banner récapitulatif                            │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🐧 Comportement par distribution
-
-| Étape | Debian/Ubuntu | AlmaLinux/RHEL/Rocky |
-|-------|---------------|----------------------|
-| **Mise à jour** | `apt update && apt upgrade` | `dnf update` |
-| **Paquet Fail2ban** | `fail2ban` | `fail2ban` + `fail2ban-firewalld` |
-| **Firewall** | Non configuré (optionnel) | `firewalld` configuré |
-| **SELinux** | N/A | Ports SSH configurés |
-| **Logs SSH** | `/var/log/auth.log` | `/var/log/secure` |
-
-### Détails des différences
-
-**🐧 Debian/Ubuntu :**
-- Utilise `apt` pour la gestion des paquets
-- Logs dans `/var/log/auth.log`
-- Aucune configuration firewall par défaut
-- Fail2ban utilise `iptables-multiport`
-
-**🔴 AlmaLinux/RHEL :**
-- Utilise `dnf` pour la gestion des paquets
-- Logs dans `/var/log/secure`
-- `firewalld` installé et configuré automatiquement
-- SELinux: ports SSH configurés via `semanage`
-- Fail2ban utilise `firewalld` comme banaction
-
----
-
-## ⚠️ Sécurité - Notes importantes
-
-> ⚠️ **AVERTISSEMENT CRITIQUE** : Lisez attentivement cette section avant d'exécuter le playbook.
-
-### 🛑 Règles de sécurité
-
-| ⚠️ Règle |理由/Raison |
-|----------|------------|
-| **Gardez un terminal ouvert** | Après le changement de port, votre session SSH actuelle peut être coupée |
-| **Méfiez-vous du port choisi** | N'utilisez pas un port déjà utilisé par un autre service |
-| **Configurez votre client SSH** | Mettez à jour votre fichier `~/.ssh/config` avec le nouveau port |
-| **Ne perdez pas le nouveau port !** | Notez-le quelque part en sécurité |
-
-### 💾 Sauvegardes automatiques
-
-Le playbook crée automatiquement une sauvegarde de votre configuration SSH :
-
-```
-/backup/ssh/sshd_config.backup.[timestamp_epoch]
-```
-
-Pour restaurer une sauvegarde :
+### Avec notifications ntfy
 
 ```bash
-# Lister les sauvegardes
-ls -la /backup/ssh/
-
-# Restaurer une sauvegarde
-sudo cp /backup/ssh/sshd_config.backup.[timestamp] /etc/ssh/sshd_config
-sudo systemctl restart sshd
+ansible-playbook playbook.yml \
+  -e "notifications_ntfy_enabled=true" \
+  -e "notifications_ntfy_topic=mon-serveur-alerts"
 ```
 
-### 🔐 Paramètres de sécurité appliqués
+Pour un topic privé (authentification requise) :
 
-| Paramètre | Valeur | Description |
-|-----------|--------|-------------|
-| `Port` | Configurable (défaut: 2222) | Port non standard |
-| `X11Forwarding` | `no` | Désactivé |
-| `AllowTcpForwarding` | `no` | Désactivé |
-| `AllowAgentForwarding` | `no` | Désactivé |
-| `PermitTunnel` | `no` | Désactivé |
-| `GatewayPorts` | `no` | Désactivé |
-| `MaxAuthTries` | `3` | Limité à 3 tentatives |
-| `ClientAliveInterval` | `180` | Déconnexion après 3 min d'inactivité |
+```bash
+ansible-playbook playbook.yml \
+  -e "notifications_ntfy_enabled=true" \
+  -e "notifications_ntfy_topic=mon-serveur-alerts" \
+  -e "notifications_ntfy_token=mntfytok_Véry_Long_Token_123"
+```
+
+### Les deux notifications simultanément
+
+```bash
+ansible-playbook playbook.yml \
+  -e "notifications_mail_enabled=true" \
+  -e "notifications_mail_smtp_host=smtp.gmail.com" \
+  -e "notifications_mail_smtp_user=moi@gmail.com" \
+  -e "notifications_mail_smtp_password='xxx'" \
+  -e "notifications_mail_from=moi@gmail.com" \
+  -e "notifications_mail_to=alertes@exemple.com" \
+  -e "notifications_ntfy_enabled=true" \
+  -e "notifications_ntfy_topic=mon-serveur-alerts"
+```
 
 ---
 
-## 🔧 Dépannage
+## 🔒 Gestion des secrets (ansible-vault)
 
-### ❌ Problèmes courants
+Toute variable contenant un secret (mot de passe SMTP, token ntfy, etc.) **doit être chiffrée avec `ansible-vault`**.
 
-| Problème | Cause probable | Solution |
-|---------|----------------|----------|
-| **Erreur "port déjà utilisé"** | Le port choisi est occupé | Vérifiez avec `ss -tulpn \| grep <port>` |
-| **Échec connection après modif** | Port incorrect ou firewall | Restore backup + vérifiez la config |
-| **fail2ban ne démarre pas** | Erreur de syntaxe dans jail.local | Vérifiez avec `fail2ban-client -d` |
-| **Permission denied** | Pas de droits sudo | Exécutez avec les bons privilèges |
-| **SELinux error** | Contexte incorrect | `restorecon /etc/ssh/sshd_config` |
-
-### 🔍 Commandes de diagnostic
+### Méthode 1 : fichier vault dédié
 
 ```bash
-# Vérifier le port SSH à l'écoute
-ss -tulpn | grep sshd
+# Créer un fichier vault chiffré
+ansible-vault create group_vars/secrets.yml
 
-# Tester la configuration SSH
-sudo sshd -t
+# Ajouter les variables :
+#   notifications_mail_smtp_password: "motdepasse"
+#   notifications_ntfy_token: "token_secret"
 
-# Statut de Fail2ban
-sudo fail2ban-client status
-
-# Logs de Fail2ban
-sudo tail -f /var/log/fail2ban.log
-
-# Statut du firewall (RHEL)
-sudo firewall-cmd --list-all
-
-# Statut SELinux
-sudo sestatus
-sudo semanage port -l | grep ssh
+# Exécuter avec le vault
+ansible-playbook playbook.yml --ask-vault-pass
 ```
 
-### 🔄 Restauration d'urgence
+### Méthode 2 : variable isolée (encrypt_string)
 
 ```bash
-# 1. Identifier la dernière sauvegarde
-ls -lt /backup/ssh/
+# Chiffrer une seule variable
+ansible-vault encrypt_string 'motdepasse_smtp' --name 'notifications_mail_smtp_password'
 
-# 2. Restaurer la configuration
-sudo cp /backup/ssh/sshd_config.backup.[timestamp] /etc/ssh/sshd_config
-
-# 3. Redémarrer SSH
-sudo systemctl restart sshd
-
-# 4. Tester la connexion sur le port standard
-ssh -p 22 user@localhost
+# Copier la sortie dans group_vars/all.yml
 ```
 
-### 🆘 Si vous êtes bloqué
+### Méthode 3 : fichier vault sans demande interactive
 
-Si vous êtes verrouillé hors du serveur après modification du port :
+```bash
+# Créer un fichiervault_pwd.txt (mode 600!)
+echo "mon_mot_de_passe_vault" > ~/.vault_pass.txt
+chmod 600 ~/.vault_pass.txt
 
-1. **Accédez physiquement** à la machine ou via console
-2. ** Restaurez la sauvegarde** :
-   ```bash
-   sudo cp /backup/ssh/sshd_config.backup.* /etc/ssh/sshd_config
-   sudo systemctl restart sshd
-   ```
-3. **Vérifiez le port** dans `/etc/ssh/sshd_config`
-4. **Reconnectez-vous** sur le port configuré
+# Exécuter avec le fichier password
+ansible-playbook playbook.yml --vault-password-file ~/.vault_pass.txt
+```
+
+---
+
+## ⚠️ Points de vigilance
+
+> 🚨 **Avant d'exécuter en production, vérifiez toujours :**
+
+- [ ] Le nouveau port SSH (`ssh_port`) n'est **pas bloqué** par un firewall
+- [ ] Vous avez un accès **alternatif** au serveur (console, IPMI, clé USB de secours)
+- [ ] Le port SSH personnalisé est bien ouvert dans le firewall **avant** de redémarrer SSHD
+- [ ] Vous êtes connecté en **sudo** ou root
+- [ ] La syntaxe estOK : `ansible-playbook playbook.yml --syntax-check`
+- [ ] La simulation passe : `ansible-playbook playbook.yml --check`
+- [ ] Les secrets sont **chiffrés** avec `ansible-vault`, jamais en clair dans les lignes de commande
+
+### En cas de perte d'accès SSH
+
+Si vous perdez l'accès après modification du port ou du firewall :
+
+1. Accéder au serveur via **console/IPMI/série**
+2. Vérifier la config SSH : `sshd -t`
+3. Vérifier le firewall : `ufw status` / `firewall-cmd --list-all`
+4. Corriger ou restaurer `/etc/ssh/sshd_config`
+5. Redémarrer SSHD : `systemctl restart sshd`
+
+---
+
+## 🤝 Contribuer & Tester
+
+### Checklist avant exécution
+
+```bash
+# 1. Vérifier la syntaxe
+ansible-playbook playbook.yml --syntax-check
+
+# 2. Simuler sans appliquer
+ansible-playbook playbook.yml --check
+
+# 3. Linter le playbook
+ansible-lint playbook.yml
+
+# 4. Si tout est OK → exécuter pour de vrai
+ansible-playbook playbook.yml
+```
+
+### Variables de test rapide
+
+```bash
+# Surcharger des variables facilement
+ansible-playbook playbook.yml \
+  -e "ssh_port=2222" \
+  -e "fail2ban_bantime=3600"
+```
 
 ---
 
 ## 📄 Licence
 
-```
-MIT License
-
-Copyright (c) 2024 Ansible SSH Security Playbook
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
+**MIT** — Utilisez, modifiez, distribuez librement.
 
 ---
 
-<div align="center">
-
-**⭐ N'oubliez pas de starifier ce projet si il vous a été utile !**
-
-Fait avec ❤️ et Ansible
-
-</div>
+> 📌 *Ce playbook est fourni tel quel. Testez toujours en environnement de staging avant production.*

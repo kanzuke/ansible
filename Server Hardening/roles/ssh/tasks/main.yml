@@ -1,0 +1,31 @@
+---
+- name: Vérification OS supporté
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in ['Debian', 'RedHat']
+    fail_msg: "OS non supporté : {{ ansible_os_family }}"
+
+- name: Déploiement de la configuration SSH
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: '0600'
+    validate: '/usr/sbin/sshd -t -f %s'
+  notify: restart sshd
+
+- name: Ouverture du port SSH dans firewalld (AlmaLinux)
+  ansible.posix.firewalld:
+    port: "{{ ssh_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when: ansible_os_family == "RedHat"
+
+- name: Ouverture du port SSH dans ufw (Debian)
+  community.general.ufw:
+    rule: allow
+    port: "{{ ssh_port }}"
+    proto: tcp
+  when: ansible_os_family == "Debian"

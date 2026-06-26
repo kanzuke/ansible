@@ -1,0 +1,36 @@
+#!/bin/bash
+# Géré par Ansible — ne pas modifier manuellement
+
+ACTION=$1
+IP=$2
+JAIL=$3
+HOSTNAME=$(hostname)
+DATE=$(date '+%Y-%m-%d %H:%M:%S')
+
+case "$ACTION" in
+  ban)
+    TITLE="🚨 Fail2ban — Bannissement sur $HOSTNAME"
+    TAGS="warning,shield,rotating_light"
+    ;;
+  unban)
+    TITLE="✅ Fail2ban — Débannissement sur $HOSTNAME"
+    TAGS="white_check_mark,shield"
+    ;;
+  *)
+    TITLE="ℹ️ Fail2ban — Événement sur $HOSTNAME"
+    TAGS="information_source"
+    ;;
+esac
+
+MESSAGE="Action : $ACTION | IP : $IP | Jail : $JAIL | $DATE"
+
+curl -s \
+{% if notifications_ntfy_token != "" %}
+  -H "Authorization: Bearer {{ notifications_ntfy_token }}" \
+{% endif %}
+  -H "Title: $TITLE" \
+  -H "Priority: {{ notifications_ntfy_priority }}" \
+  -H "Tags: $TAGS" \
+  -d "$MESSAGE" \
+  "{{ notifications_ntfy_url }}/{{ notifications_ntfy_topic }}" \
+  > /dev/null 2>&1

@@ -1,0 +1,39 @@
+---
+- name: Installation de fail2ban (Debian)
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Installation de fail2ban (AlmaLinux)
+  ansible.builtin.dnf:
+    name:
+      - fail2ban
+      - fail2ban-systemd
+    state: present
+    enablerepo: epel
+  when: ansible_os_family == "RedHat"
+
+- name: Configuration mail
+  ansible.builtin.include_tasks: mail.yml
+  when: notifications_mail_enabled | bool
+
+- name: Configuration ntfy
+  ansible.builtin.include_tasks: ntfy.yml
+  when: notifications_ntfy_enabled | bool
+
+- name: Déploiement jail.local
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart fail2ban
+
+- name: Activation et démarrage de fail2ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true

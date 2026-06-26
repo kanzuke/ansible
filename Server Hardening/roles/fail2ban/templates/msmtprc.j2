@@ -1,0 +1,16 @@
+# Géré par Ansible — ne pas modifier manuellement
+
+defaults
+auth           on
+tls            {{ notifications_mail_smtp_tls | ternary('on', 'off') }}
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /var/log/msmtp.log
+
+account        default
+host           {{ notifications_mail_smtp_host }}
+port           {{ notifications_mail_smtp_port }}
+from           {{ notifications_mail_from }}
+user           {{ notifications_mail_smtp_user }}
+password       {{ notifications_mail_smtp_password }}
+
+account default : default

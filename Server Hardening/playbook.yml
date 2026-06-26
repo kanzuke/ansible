@@ -1,0 +1,10 @@
+---
+- name: Sécurisation du serveur (SSH + Fail2ban + Notifications)
+  hosts: local
+  become: true
+  vars_files:
+    - defaults/main.yml
+
+  roles:
+    - role: ssh
+    - role: fail2ban

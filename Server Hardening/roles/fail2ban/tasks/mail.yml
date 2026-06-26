@@ -1,0 +1,29 @@
+---
+- name: Installation de msmtp (Debian)
+  ansible.builtin.apt:
+    name:
+      - msmtp
+      - msmtp-mta
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Installation de msmtp (AlmaLinux)
+  ansible.builtin.dnf:
+    name: msmtp
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Déploiement de la configuration msmtp
+  ansible.builtin.template:
+    src: msmtprc.j2
+    dest: /etc/msmtprc
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Vérification de la présence de sendmail (AlmaLinux)
+  ansible.builtin.file:
+    src: /usr/bin/msmtp
+    dest: /usr/sbin/sendmail
+    state: link
+  when: ansible_os_family == "RedHat"

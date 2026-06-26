@@ -1,0 +1,28 @@
+# Géré par Ansible — ne pas modifier manuellement
+
+[DEFAULT]
+bantime  = {{ fail2ban_bantime }}
+findtime = {{ fail2ban_findtime }}
+maxretry = {{ fail2ban_maxretry }}
+
+# Backend adapté selon l'OS
+backend = {% if ansible_os_family == "RedHat" %}systemd{% else %}auto{% endif %}
+
+
+{% set actions = [] %}
+{% if notifications_mail_enabled %}
+{% set _ = actions.append('%(action_mwl)s') %}
+{% endif %}
+{% if notifications_ntfy_enabled %}
+{% set _ = actions.append('ntfy') %}
+{% endif %}
+{% if actions %}
+action = {{ actions | join('\n         ') }}
+{% endif %}
+
+[sshd]
+enabled  = true
+port     = {{ ssh_port }}
+filter   = sshd
+logpath  = %(sshd_log)s
+maxretry = {{ fail2ban_maxretry }}
