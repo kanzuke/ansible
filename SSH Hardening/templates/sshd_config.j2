@@ -1,0 +1,49 @@
+# =========================================================
+# sshd_config - Géré par Ansible - Ne pas modifier manuellement
+# =========================================================
+
+# --- Réseau ---
+Port {{ ssh_port }}
+AddressFamily any
+ListenAddress 0.0.0.0
+ListenAddress ::
+
+# --- Authentification ---
+PermitRootLogin no
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+PasswordAuthentication yes
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+UsePAM yes
+
+# --- Sécurité - Désactivation tunneling et forwarding ---
+AllowTcpForwarding no
+X11Forwarding no
+X11UseLocalhost no
+PermitTunnel no
+GatewayPorts no
+AllowAgentForwarding no
+PermitUserEnvironment no
+
+# --- Sessions ---
+MaxAuthTries 4
+MaxSessions 5
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# --- Restrictions protocoles et chiffrements ---
+Protocol 2
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512
+Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+
+# --- Logs ---
+SyslogFacility AUTH
+LogLevel VERBOSE
+
+# --- Divers ---
+PrintMotd no
+AcceptEnv LANG LC_*
+Subsystem sftp /usr/lib/openssh/sftp-server

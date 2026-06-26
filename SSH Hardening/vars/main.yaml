@@ -1,0 +1,13 @@
+---
+# Port SSH personnalisé
+ssh_port: 2222
+
+# Paramètres Fail2ban
+fail2ban_bantime: 3600        # Durée du ban en secondes (1h)
+fail2ban_findtime: 600        # Fenêtre de détection en secondes (10min)
+fail2ban_maxretry: 5          # Nombre de tentatives avant ban
+fail2ban_ignoreip:
+  - "127.0.0.1/8"
+  - "::1"
+  # Ajoutez vos IPs de confiance ici
+  # - "192.168.1.0/24"
