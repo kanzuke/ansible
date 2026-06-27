@@ -15,13 +15,17 @@
     validate: '/usr/sbin/sshd -t -f %s'
   notify: restart sshd
 
-- name: Ouverture du port SSH dans firewalld (AlmaLinux)
-  ansible.posix.firewalld:
-    port: "{{ ssh_port }}/tcp"
-    permanent: true
+- name: Installation de ufw (Debian)
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Activation de ufw (Debian)
+  community.general.ufw:
     state: enabled
-    immediate: true
-  when: ansible_os_family == "RedHat"
+  when: ansible_os_family == "Debian"
 
 - name: Ouverture du port SSH dans ufw (Debian)
   community.general.ufw:
@@ -29,3 +33,11 @@
     port: "{{ ssh_port }}"
     proto: tcp
   when: ansible_os_family == "Debian"
+
+- name: Ouverture du port SSH dans firewalld (AlmaLinux)
+  ansible.posix.firewalld:
+    port: "{{ ssh_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  when: ansible_os_family == "RedHat"
