@@ -1,0 +1,13 @@
+- name: Ouverture du port SSH dans firewalld
+  firewalld:
+    port: "{{ ssh_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+
+- name: Suppression du port SSH par défaut dans firewalld
+  firewalld:
+    service: ssh
+    permanent: true
+    state: disabled
+    immediate: true

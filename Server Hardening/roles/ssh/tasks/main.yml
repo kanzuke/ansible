@@ -15,29 +15,10 @@
     validate: '/usr/sbin/sshd -t -f %s'
   notify: restart sshd
 
-- name: Installation de ufw (Debian)
-  ansible.builtin.apt:
-    name: ufw
-    state: present
-    update_cache: true
+- name: Configuration firewall Debian
+  include_tasks: firewall_debian.yml
   when: ansible_os_family == "Debian"
 
-- name: Activation de ufw (Debian)
-  community.general.ufw:
-    state: enabled
-  when: ansible_os_family == "Debian"
-
-- name: Ouverture du port SSH dans ufw (Debian)
-  community.general.ufw:
-    rule: allow
-    port: "{{ ssh_port }}"
-    proto: tcp
-  when: ansible_os_family == "Debian"
-
-- name: Ouverture du port SSH dans firewalld (AlmaLinux)
-  ansible.posix.firewalld:
-    port: "{{ ssh_port }}/tcp"
-    permanent: true
-    state: enabled
-    immediate: true
+- name: Configuration firewall RedHat
+  include_tasks: firewall_redhat.yml
   when: ansible_os_family == "RedHat"

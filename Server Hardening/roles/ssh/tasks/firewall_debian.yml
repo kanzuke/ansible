@@ -1,0 +1,14 @@
+- name: Installation de ufw
+  apt:
+    name: ufw
+    state: present
+
+- name: Ouverture du port SSH dans ufw
+  community.general.ufw:
+    rule: allow
+    port: "{{ ssh_port }}"
+    proto: tcp
+
+- name: Activation de ufw
+  community.general.ufw:
+    state: enabled
