@@ -1,10 +1,10 @@
 ---
-- name: Installer Docker sur AlmaLinux (localhost) avec Python via dnf
+- name: Installer Docker sur AlmaLinux (localhost) avec gestion native de Docker Compose
   hosts: localhost
   connection: local
   become: yes
   vars:
-    docker_compose_version: "latest"  # "latest" ou une version spécifique comme "v2.20.3"
+    docker_compose_version: "latest"  # Non utilisé (le plugin Docker Compose est intégré)
 
   tasks:
     - name: Vérifier que le système est AlmaLinux
@@ -30,6 +30,7 @@
           - python3-pip
           - python3-devel
           - gcc
+          - git
         state: present
 
     - name: Ajouter la clé GPG officielle de Docker
@@ -46,14 +47,14 @@
         gpgkey: https://download.docker.com/linux/centos/gpg
         enabled: yes
 
-    - name: Installer Docker CE (dernière version)
+    - name: Installer Docker CE et Docker Compose (plugin intégré)
       dnf:
         name:
           - docker-ce
           - docker-ce-cli
           - containerd.io
           - docker-buildx-plugin
-          - docker-compose-plugin
+          - docker-compose-plugin  # Plugin officiel Docker Compose v2 intégré
         state: latest
 
     - name: Démarrer et activer le service Docker
@@ -68,21 +69,12 @@
         groups: docker
         append: yes
 
-    - name: Installer Docker Compose (via pip installé par dnf)
-      block:
-        - name: Installer docker-compose via pip (qui est déjà installé via dnf)
-          ansible.builtin.pip:
-            name: docker-compose
-            executable: pip3
-            state: latest
-      when: docker_compose_version == "latest"
-
     - name: Vérifier l'installation de Docker
       ansible.builtin.command: docker --version
       register: docker_version_output
       changed_when: false
 
-    - name: Vérifier Docker Compose
+    - name: Vérifier Docker Compose (plugin intégré)
       ansible.builtin.command: docker compose version
       register: docker_compose_version_output
       changed_when: false
