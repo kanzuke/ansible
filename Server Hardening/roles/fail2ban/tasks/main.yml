@@ -6,6 +6,12 @@
     update_cache: true
   when: ansible_os_family == "Debian"
 
+- name: Installation du dépôt EPEL (AlmaLinux/RedHat)
+  dnf:
+    name: epel-release
+    state: present
+  when: ansible_os_family == "RedHat"
+
 - name: Installation de fail2ban (AlmaLinux)
   ansible.builtin.dnf:
     name:
