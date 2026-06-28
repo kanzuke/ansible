@@ -8,8 +8,10 @@ maxretry = {{ fail2ban_maxretry }}
 # Backend adapté selon l'OS
 backend = {% if ansible_os_family == "RedHat" %}systemd{% else %}auto{% endif %}
 
-
 {% set actions = [] %}
+{% if ansible_os_family == "RedHat" %}
+{% set _ = actions.append('firewallcmd-ipset') %}
+{% endif %}
 {% if notifications_mail_enabled %}
 {% set _ = actions.append('%(action_mwl)s') %}
 {% endif %}

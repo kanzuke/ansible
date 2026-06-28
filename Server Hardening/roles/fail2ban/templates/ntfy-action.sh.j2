@@ -1,36 +1,27 @@
 #!/bin/bash
-# Géré par Ansible — ne pas modifier manuellement
 
+NTFY_URL="{{ ntfy_url }}"
+TOPIC="{{ ntfy_topic }}"
 ACTION=$1
 IP=$2
 JAIL=$3
-HOSTNAME=$(hostname)
-DATE=$(date '+%Y-%m-%d %H:%M:%S')
+SERVER=$(cat /etc/hostname)  # ✅ Remplace hostname qui n'est pas trouvé
 
 case "$ACTION" in
   ban)
-    TITLE="🚨 Fail2ban — Bannissement sur $HOSTNAME"
-    TAGS="warning,shield,rotating_light"
+    curl -s \
+      -H "Title: 🚨 Intrusion détectée - $SERVER" \
+      -H "Priority: high" \
+      -H "Tags: warning,shield" \
+      -d "IP $IP bannie sur $JAIL" \
+      "$NTFY_URL/$TOPIC"
     ;;
   unban)
-    TITLE="✅ Fail2ban — Débannissement sur $HOSTNAME"
-    TAGS="white_check_mark,shield"
-    ;;
-  *)
-    TITLE="ℹ️ Fail2ban — Événement sur $HOSTNAME"
-    TAGS="information_source"
+    curl -s \
+      -H "Title: ✅ Débannissement - $SERVER" \
+      -H "Priority: default" \
+      -H "Tags: white_check_mark" \
+      -d "IP $IP débannie sur $JAIL" \
+      "$NTFY_URL/$TOPIC"
     ;;
 esac
-
-MESSAGE="Action : $ACTION | IP : $IP | Jail : $JAIL | $DATE"
-
-curl -s \
-{% if notifications_ntfy_token != "" %}
-  -H "Authorization: Bearer {{ notifications_ntfy_token }}" \
-{% endif %}
-  -H "Title: $TITLE" \
-  -H "Priority: {{ notifications_ntfy_priority }}" \
-  -H "Tags: $TAGS" \
-  -d "$MESSAGE" \
-  "{{ notifications_ntfy_url }}/{{ notifications_ntfy_topic }}" \
-  > /dev/null 2>&1
