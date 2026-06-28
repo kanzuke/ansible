@@ -1,11 +1,19 @@
 ---
-- name: Installer la dernière version de Docker sur AlmaLinux
-  hosts: all
+- name: Installer Docker sur AlmaLinux (localhost)
+  hosts: localhost
+  connection: local
   become: yes
   vars:
     docker_compose_version: "latest"  # "latest" ou une version spécifique comme "v2.20.3"
 
   tasks:
+    - name: Vérifier que le système est AlmaLinux
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == "AlmaLinux"
+        fail_msg: "Ce playbook est conçu uniquement pour AlmaLinux"
+        success_msg: "Système compatible : AlmaLinux {{ ansible_facts['distribution_version'] }}"
+
     - name: Mettre à jour tous les paquets
       dnf:
         name: "*"
@@ -28,7 +36,7 @@
         state: present
         key: https://download.docker.com/linux/centos/gpg
 
-    - name: Ajouter le dépôt Docker CE (dernière version)
+    - name: Ajouter le dépôt Docker CE
       ansible.builtin.yum_repository:
         name: docker-ce
         description: Docker CE Repository
@@ -37,7 +45,7 @@
         gpgkey: https://download.docker.com/linux/centos/gpg
         enabled: yes
 
-    - name: Installer Docker CE (dernière version disponible)
+    - name: Installer Docker CE (dernière version)
       dnf:
         name:
           - docker-ce
@@ -45,7 +53,7 @@
           - containerd.io
           - docker-buildx-plugin
           - docker-compose-plugin
-        state: latest  # Installe la dernière version disponible
+        state: latest
 
     - name: Démarrer et activer le service Docker
       ansible.builtin.service:
@@ -53,40 +61,33 @@
         state: started
         enabled: yes
 
-    - name: Ajouter l'utilisateur courant au groupe `docker`
+    - name: Ajouter l'utilisateur courant au groupe docker
       ansible.builtin.user:
-        name: "{{ ansible_user }}"
+        name: "{{ ansible_user_id }}"
         groups: docker
         append: yes
 
-    - name: Installer Docker Compose (version latest ou spécifique)
-      ansible.builtin.get_url:
-        url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-linux-x86_64"
-        dest: /usr/local/bin/docker-compose
-        mode: '0755'
-      when: docker_compose_version != "latest"  # Skip si on veut la dernière version via dnf
-
-    - name: Installer Docker Compose via pip (dernière version)
-      ansible.builtin.pip:
-        name: docker-compose
-        executable: pip3
-        state: latest
-      when: docker_compose_version == "latest"  # Alternative pour la dernière version
+    - name: Installer Docker Compose (dernière version)
+      block:
+        - name: Installer via pip (recommandé pour Docker Compose v2)
+          ansible.builtin.pip:
+            name: docker-compose
+            executable: pip3
+            state: latest
+      when: docker_compose_version == "latest"
 
     - name: Vérifier l'installation de Docker
       ansible.builtin.command: docker --version
       register: docker_version_output
       changed_when: false
 
-    - name: Afficher la version de Docker
-      ansible.builtin.debug:
-        var: docker_version_output.stdout
-
     - name: Vérifier Docker Compose
-      ansible.builtin.command: docker-compose --version
+      ansible.builtin.command: docker compose version
       register: docker_compose_version_output
       changed_when: false
 
-    - name: Afficher la version de Docker Compose
+    - name: Afficher les versions installées
       ansible.builtin.debug:
-        var: docker_compose_version_output.stdout
+        msg:
+          - "Docker version: {{ docker_version_output.stdout }}"
+          - "Docker Compose version: {{ docker_compose_version_output.stdout }}"
