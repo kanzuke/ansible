@@ -1,12 +1,28 @@
+- name: Installation de python-firewall
+  dnf:
+    name: python3-firewall
+    state: present
+
+- name: Installation de firewalld
+  dnf:
+    name: firewalld
+    state: present
+
+- name: Activation de firewalld
+  service:
+    name: firewalld
+    state: started
+    enabled: true
+
 - name: Ouverture du port SSH dans firewalld
-  firewalld:
+  ansible.posix.firewalld:
     port: "{{ ssh_port }}/tcp"
     permanent: true
     state: enabled
     immediate: true
 
 - name: Suppression du port SSH par défaut dans firewalld
-  firewalld:
+  ansible.posix.firewalld:
     service: ssh
     permanent: true
     state: disabled
