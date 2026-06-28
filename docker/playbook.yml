@@ -1,5 +1,5 @@
 ---
-- name: Installer Docker sur AlmaLinux (localhost)
+- name: Installer Docker sur AlmaLinux (localhost) avec Python via dnf
   hosts: localhost
   connection: local
   become: yes
@@ -20,12 +20,13 @@
         state: latest
         update_cache: yes
 
-    - name: Installer les dépendances nécessaires
+    - name: Installer les dépendances nécessaires (via dnf uniquement)
       dnf:
         name:
           - ca-certificates
           - curl
           - gnupg
+          - python3
           - python3-pip
           - python3-devel
           - gcc
@@ -67,9 +68,9 @@
         groups: docker
         append: yes
 
-    - name: Installer Docker Compose (dernière version)
+    - name: Installer Docker Compose (via pip installé par dnf)
       block:
-        - name: Installer via pip (recommandé pour Docker Compose v2)
+        - name: Installer docker-compose via pip (qui est déjà installé via dnf)
           ansible.builtin.pip:
             name: docker-compose
             executable: pip3
