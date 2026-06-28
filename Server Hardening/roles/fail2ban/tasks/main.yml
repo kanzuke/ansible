@@ -12,6 +12,12 @@
     state: present
   when: ansible_os_family == "RedHat"
 
+- name: Installer ipset (RedHat)
+  ansible.builtin.package:
+    name: ipset
+    state: present
+  when: ansible_os_family == "RedHat"
+
 - name: Installation de fail2ban (AlmaLinux)
   ansible.builtin.dnf:
     name:
