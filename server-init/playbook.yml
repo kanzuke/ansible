@@ -1,0 +1,222 @@
+---
+- name: Configuration initiale du serveur
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+  vars_files:
+    - vars/main.yml
+
+  pre_tasks:
+    - name: Vérification de la distribution supportée
+      ansible.builtin.fail:
+        msg: >
+          Distribution non supportée : {{ ansible_distribution }}.
+          Ce playbook supporte uniquement Debian et AlmaLinux/RHEL.
+      when:
+        - ansible_distribution not in ['Debian', 'Ubuntu', 'AlmaLinux', 'Rocky', 'RedHat', 'CentOS']
+
+  # ────────────────────────────────────────────────
+  # BLOC : Mise à jour du système
+  # ────────────────────────────────────────────────
+  tasks:
+    - name: "[ MISE À JOUR ] Mettre à jour le cache APT"
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      tags: update
+
+    - name: "[ MISE À JOUR ] Mettre à jour tous les paquets (Debian)"
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: true
+        autoclean: true
+      when: ansible_os_family == "Debian"
+      tags: update
+
+    - name: "[ MISE À JOUR ] Mettre à jour tous les paquets (AlmaLinux/RHEL)"
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+      when: ansible_os_family == "RedHat"
+      tags: update
+
+    # ────────────────────────────────────────────────
+    # BLOC : Installation des paquets
+    # ────────────────────────────────────────────────
+    - name: "[ PAQUETS ] Installer les paquets communs (Debian)"
+      ansible.builtin.apt:
+        name: "{{ common_packages + debian_packages }}"
+        state: present
+      when: ansible_os_family == "Debian"
+      tags: packages
+
+    - name: "[ PAQUETS ] Installer les paquets communs (AlmaLinux/RHEL)"
+      ansible.builtin.dnf:
+        name: "{{ common_packages + rhel_packages }}"
+        state: present
+      when: ansible_os_family == "RedHat"
+      tags: packages
+
+    # ────────────────────────────────────────────────
+    # BLOC : Bannière SSH
+    # ────────────────────────────────────────────────
+    - name: "[ SSH ] Déployer la bannière SSH"
+      ansible.builtin.template:
+        src: templates/ssh_banner.j2
+        dest: /etc/ssh/banner
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart SSH
+      tags: ssh
+
+    - name: "[ SSH ] Activer la bannière dans sshd_config"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?Banner'
+        line: 'Banner /etc/ssh/banner'
+        state: present
+        backup: true
+      notify: Restart SSH
+      tags: ssh
+
+    - name: "[ SSH ] Désactiver le PrintLastLog (remplacé par le MOTD)"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PrintLastLog'
+        line: 'PrintLastLog no'
+        state: present
+      notify: Restart SSH
+      tags: ssh
+
+    - name: "[ SSH ] Activer PrintMotd"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PrintMotd'
+        line: 'PrintMotd yes'
+        state: present
+      notify: Restart SSH
+      tags: ssh
+
+    # ────────────────────────────────────────────────
+    # BLOC : MOTD Dynamique
+    # ────────────────────────────────────────────────
+    - name: "[ MOTD ] Vider le MOTD statique"
+      ansible.builtin.copy:
+        content: ""
+        dest: /etc/motd
+        owner: root
+        group: root
+        mode: '0644'
+      tags: motd
+
+    - name: "[ MOTD ] Désactiver les scripts MOTD par défaut (Debian)"
+      ansible.builtin.file:
+        path: /etc/update-motd.d/
+        state: directory
+      when: ansible_os_family == "Debian"
+      tags: motd
+
+    - name: "[ MOTD ] Lister les scripts MOTD existants (Debian)"
+      ansible.builtin.find:
+        paths: /etc/update-motd.d/
+        file_type: file
+      register: motd_scripts
+      when: ansible_os_family == "Debian"
+      tags: motd
+
+    - name: "[ MOTD ] Désactiver les scripts MOTD existants (Debian)"
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        mode: '0644'
+      loop: "{{ motd_scripts.files }}"
+      when:
+        - ansible_os_family == "Debian"
+        - motd_scripts.files is defined
+      tags: motd
+
+    - name: "[ MOTD ] Déployer le script MOTD dynamique (Debian)"
+      ansible.builtin.template:
+        src: templates/motd_dynamic.sh.j2
+        dest: /etc/update-motd.d/00-dynamic-motd
+        owner: root
+        group: root
+        mode: '0755'
+      when: ansible_os_family == "Debian"
+      tags: motd
+
+    - name: "[ MOTD ] Déployer le script MOTD dynamique (AlmaLinux/RHEL)"
+      ansible.builtin.template:
+        src: templates/motd_dynamic.sh.j2
+        dest: /etc/profile.d/motd_dynamic.sh
+        owner: root
+        group: root
+        mode: '0755'
+      when: ansible_os_family == "RedHat"
+      tags: motd
+
+    - name: "[ MOTD ] Activer pam_motd (Debian)"
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/sshd
+        regexp: '.*pam_motd.*'
+        line: 'session    optional     pam_motd.so motd=/run/motd.dynamic noupdate'
+        state: present
+      when: ansible_os_family == "Debian"
+      tags: motd
+
+    # ────────────────────────────────────────────────
+    # BLOC : Sécurité de base
+    # ────────────────────────────────────────────────
+    - name: "[ SECURITE ] Configurer le timeout SSH (10 min)"
+      ansible.builtin.blockinfile:
+        path: /etc/ssh/sshd_config
+        marker: "# {mark} ANSIBLE MANAGED - TIMEOUT"
+        block: |
+          ClientAliveInterval 300
+          ClientAliveCountMax 2
+      notify: Restart SSH
+      tags: security
+
+    - name: "[ SECURITE ] Désactiver l'authentification par mot de passe root"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin prohibit-password'
+        state: present
+      notify: Restart SSH
+      tags: security
+
+    # ────────────────────────────────────────────────
+    # BLOC : Vérification finale
+    # ────────────────────────────────────────────────
+    - name: "[ VÉRIFICATION ] Valider la syntaxe sshd_config"
+      ansible.builtin.command:
+        cmd: sshd -t
+      changed_when: false
+      tags:
+        - ssh
+        - security
+
+    - name: "[ INFO ] Afficher le résumé de la configuration"
+      ansible.builtin.debug:
+        msg:
+          - "✅ Serveur configuré avec succès"
+          - "🖥  Hostname     : {{ ansible_hostname }}"
+          - "🐧  OS           : {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "📦  Paquets      : installés"
+          - "🔐  Bannière SSH : /etc/ssh/banner"
+          - "📋  MOTD         : dynamique activé"
+      tags: always
+
+  # ────────────────────────────────────────────────
+  # HANDLERS
+  # ────────────────────────────────────────────────
+  handlers:
+    - name: Restart SSH
+      ansible.builtin.service:
+        name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
+        state: restarted
+        enabled: true

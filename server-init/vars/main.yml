@@ -1,0 +1,42 @@
+---
+# Bannière SSH
+ssh_banner_text: |
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                                                              ║
+  ║       ██╗    ██╗ █████╗ ██████╗ ███╗   ██╗██╗███╗   ██╗    ║
+  ║       ██║    ██║██╔══██╗██╔══██╗████╗  ██║██║████╗  ██║    ║
+  ║       ██║ █╗ ██║███████║██████╔╝██╔██╗ ██║██║██╔██╗ ██║    ║
+  ║       ██║███╗██║██╔══██║██╔══██╗██║╚██╗██║██║██║╚██╗██║    ║
+  ║       ╚███╔███╔╝██║  ██║██║  ██║██║ ╚████║██║██║ ╚████║    ║
+  ║        ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝╚═╝  ╚═══╝   ║
+  ║                                                              ║
+  ║          Accès restreint aux personnes autorisées            ║
+  ║         Toute connexion non autorisée est interdite          ║
+  ║              et pourra faire l'objet de poursuites           ║
+  ║                                                              ║
+  ╚══════════════════════════════════════════════════════════════╝
+
+# Paquets communs aux deux distributions
+common_packages:
+  - git
+  - wget
+  - curl
+  - iperf3
+
+# Paquets spécifiques Debian
+debian_packages:
+  - net-tools
+  - dnsutils
+  - htop
+  - vim
+  - tree
+  - unzip
+
+# Paquets spécifiques AlmaLinux/RHEL
+rhel_packages:
+  - net-tools
+  - bind-utils
+  - htop
+  - vim
+  - tree
+  - unzip
