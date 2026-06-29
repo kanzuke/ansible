@@ -4,7 +4,7 @@
   connection: local
   become: yes
   vars:
-    docker_compose_version: "latest"  # Non utilisé (plugin intégré)
+    docker_compose_version: "latest"
 
   tasks:
     - name: Vérifier la distribution cible
@@ -61,10 +61,11 @@
         key: https://download.docker.com/linux/centos/gpg
       when: ansible_facts['distribution'] == "AlmaLinux"
 
-    - name: Ajouter la clé GPG Docker (Debian)
-      ansible.builtin.apt_key:
+    - name: Télécharger la clé GPG Docker (Debian) - Méthode moderne
+      ansible.builtin.get_url:
         url: https://download.docker.com/linux/debian/gpg
-        state: present
+        dest: /usr/share/keyrings/docker.asc
+        mode: '0644'
       when: ansible_facts['distribution'] == "Debian"
 
     - name: Ajouter le dépôt Docker CE (AlmaLinux)
@@ -77,9 +78,9 @@
         enabled: yes
       when: ansible_facts['distribution'] == "AlmaLinux"
 
-    - name: Ajouter le dépôt Docker CE (Debian)
+    - name: Ajouter le dépôt Docker CE (Debian) - Méthode moderne
       ansible.builtin.apt_repository:
-        repo: "deb [arch={{ ansible_facts['architecture'] }}] https://download.docker.com/linux/debian {{ ansible_facts['distribution_release'] }} stable"
+        repo: "deb [arch={{ ansible_facts['architecture'] }} signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_facts['distribution_release'] }} stable"
         state: present
         filename: docker
       when: ansible_facts['distribution'] == "Debian"
