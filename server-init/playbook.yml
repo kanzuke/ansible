@@ -92,14 +92,17 @@
       notify: Restart SSH
       tags: ssh
 
-    - name: "[ SSH ] Activer PrintMotd"
+    - name: "[ SSH ] Désactiver PrintMotd pour éviter le double affichage"
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
         regexp: '^#?PrintMotd'
-        line: 'PrintMotd yes'
+        line: 'PrintMotd no'
         state: present
       notify: Restart SSH
-      tags: ssh
+      tags:
+        - ssh
+        - motd
+
 
     # ────────────────────────────────────────────────
     # BLOC : MOTD Dynamique
