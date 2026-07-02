@@ -1,0 +1,23 @@
+---
+- name: Installer les dépendances (Debian)
+  ansible.builtin.apt:
+    name:
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+
+- name: Ajouter le dépôt CrowdSec via le script officiel
+  ansible.builtin.shell: |
+    curl -s https://install.crowdsec.net | bash
+  args:
+    creates: /etc/apt/sources.list.d/crowdsec.list
+
+- name: Mettre à jour le cache apt après ajout du dépôt
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Installer le paquet crowdsec
+  ansible.builtin.apt:
+    name: crowdsec
+    state: present

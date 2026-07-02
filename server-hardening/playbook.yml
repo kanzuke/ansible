@@ -1,0 +1,8 @@
+---
+- name: Sécurisation du serveur
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+  roles:
+    - crowdsec

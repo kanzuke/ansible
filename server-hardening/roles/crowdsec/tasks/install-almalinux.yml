@@ -1,0 +1,17 @@
+---
+- name: Installer les dépendances (AlmaLinux)
+  ansible.builtin.dnf:
+    name:
+      - curl
+    state: present
+
+- name: Ajouter le dépôt CrowdSec via le script officiel
+  ansible.builtin.shell: |
+    curl -s https://install.crowdsec.net | bash
+  args:
+    creates: /etc/yum.repos.d/crowdsecurity_crowdsec.repo
+
+- name: Installer le paquet crowdsec
+  ansible.builtin.dnf:
+    name: crowdsec
+    state: present

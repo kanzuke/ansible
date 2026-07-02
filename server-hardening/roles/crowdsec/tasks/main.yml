@@ -1,0 +1,44 @@
+---
+- name: Vérifier que SSH est bien installé (pré-requis)
+  ansible.builtin.package:
+    name: openssh-server
+    state: present
+
+- name: Installer CrowdSec (Debian/Ubuntu)
+  ansible.builtin.include_tasks: install-debian.yml
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Installer CrowdSec (AlmaLinux/RHEL)
+  ansible.builtin.include_tasks: install-almalinux.yml
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: S'assurer que le service crowdsec est démarré et actif
+  ansible.builtin.systemd:
+    name: crowdsec
+    state: started
+    enabled: true
+
+- name: Installer les collections nécessaires
+  ansible.builtin.include_tasks: collections.yml
+
+- name: Installer et configurer le bouncer firewall
+  ansible.builtin.include_tasks: bouncer-firewall.yml
+
+- name: Personnaliser la durée de ban par défaut
+  ansible.builtin.template:
+    src: profiles.yml.j2
+    dest: /etc/crowdsec/profiles.yml
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Redémarrer crowdsec
+
+- name: Enregistrer l'instance sur la console CrowdSec (optionnel)
+  ansible.builtin.command:
+    cmd: "cscli console enroll {{ crowdsec_enroll_key }}"
+  when:
+    - crowdsec_enroll_console | bool
+    - crowdsec_enroll_key != ""
+  register: enroll_result
+  changed_when: "'already enrolled' not in enroll_result.stdout"
+  notify: Redémarrer crowdsec

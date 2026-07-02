@@ -1,0 +1,33 @@
+---
+- name: Installer le bouncer firewall (Debian)
+  ansible.builtin.apt:
+    name: crowdsec-firewall-bouncer-iptables
+    state: present
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Installer le bouncer firewall (AlmaLinux)
+  ansible.builtin.dnf:
+    name: crowdsec-firewall-bouncer-iptables
+    state: present
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: S'assurer que le service du bouncer firewall est démarré
+  ansible.builtin.systemd:
+    name: crowdsec-firewall-bouncer
+    state: started
+    enabled: true
+
+- name: Installer et configurer le bouncer Nginx (si activé)
+  block:
+    - name: Installer le bouncer nginx (Debian)
+      ansible.builtin.apt:
+        name: crowdsec-nginx-bouncer
+        state: present
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Installer le bouncer nginx (AlmaLinux)
+      ansible.builtin.dnf:
+        name: crowdsec-nginx-bouncer
+        state: present
+      when: ansible_facts['os_family'] == "RedHat"
+  when: crowdsec_enable_nginx | bool

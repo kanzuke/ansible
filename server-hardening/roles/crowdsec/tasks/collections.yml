@@ -1,0 +1,44 @@
+---
+- name: Vérifier si SSH est installé (auto-détection collection sshd)
+  ansible.builtin.stat:
+    path: /usr/sbin/sshd
+  register: sshd_check
+
+- name: Installer la collection sshd si SSH est présent
+  ansible.builtin.command:
+    cmd: cscli collections install crowdsecurity/sshd
+  when: sshd_check.stat.exists
+  register: sshd_collec
+  changed_when: "'already installed' not in sshd_collec.stdout"
+  notify: Redémarrer crowdsec
+
+- name: Installer la collection Linux de base
+  ansible.builtin.command:
+    cmd: cscli collections install crowdsecurity/linux
+  register: linux_collec
+  changed_when: "'already installed' not in linux_collec.stdout"
+  notify: Redémarrer crowdsec
+
+- name: Vérifier si Nginx est installé (pour la collection dédiée)
+  ansible.builtin.stat:
+    path: /usr/sbin/nginx
+  register: nginx_check
+  when: crowdsec_enable_nginx | bool
+
+- name: Installer la collection nginx si activée
+  ansible.builtin.command:
+    cmd: cscli collections install crowdsecurity/nginx
+  when:
+    - crowdsec_enable_nginx | bool
+    - nginx_check.stat.exists
+  register: nginx_collec
+  changed_when: "'already installed' not in nginx_collec.stdout"
+  notify: Redémarrer crowdsec
+
+- name: Installer des collections supplémentaires (variable crowdsec_extra_collections)
+  ansible.builtin.command:
+    cmd: "cscli collections install {{ item }}"
+  loop: "{{ crowdsec_extra_collections }}"
+  register: extra_collec
+  changed_when: "'already installed' not in extra_collec.stdout"
+  notify: Redémarrer crowdsec

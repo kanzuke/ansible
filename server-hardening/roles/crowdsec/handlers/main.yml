@@ -1,0 +1,5 @@
+---
+- name: Redémarrer crowdsec
+  ansible.builtin.systemd:
+    name: crowdsec
+    state: restarted

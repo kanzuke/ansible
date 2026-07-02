@@ -1,0 +1,6 @@
+---
+crowdsec_enable_nginx: false
+crowdsec_enroll_console: false
+crowdsec_enroll_key: ""
+crowdsec_ban_duration: "4h"
+crowdsec_extra_collections: []
