@@ -1,0 +1,90 @@
+---
+- name: Configurer GNOME pour écran 14" (Fedora/OpenSUSE)
+  hosts: localhost
+  connection: local
+  become: yes
+  vars_files:
+    - vars/main.yml
+
+  tasks:
+    # 1️⃣ Mise à jour du système
+    - name: Mettre à jour tous les paquets
+      block:
+        - name: Mettre à jour Fedora
+          ansible.builtin.dnf:
+            name: "*"
+            state: latest
+            update_cache: yes
+          when: ansible_facts['os_family'] == "RedHat"
+
+        - name: Mettre à jour OpenSUSE
+          ansible.builtin.zypper:
+            name: "*"
+            state: latest
+            update_cache: yes
+          when: ansible_facts['os_family'] == "Suse"
+
+    # 2️⃣ Installation des packages de base
+    - name: Installer les packages système
+      block:
+        - name: Installer via dnf (Fedora)
+          ansible.builtin.dnf:
+            name: "{{ system_packages }}"
+            state: present
+          when: ansible_facts['os_family'] == "RedHat"
+
+        - name: Installer via zypper (OpenSUSE)
+          ansible.builtin.zypper:
+            name: "{{ system_packages }}"
+            state: present
+          when: ansible_facts['os_family'] == "Suse"
+
+    # 3️⃣ Configuration GNOME
+    - name: Configurer GNOME pour écran 14"
+      block:
+        # Installer les extensions GNOME
+        - name: Installer les extensions GNOME
+          ansible.builtin.command: >
+            gnome-extensions install {{ item }}
+          loop: "{{ gnome_extensions }}"
+          register: extension_install
+          changed_when: "'already installed' not in extension_install.stderr"
+          ignore_errors: yes
+
+        # Activer les extensions
+        - name: Activer les extensions GNOME
+          ansible.builtin.command: >
+            gnome-extensions enable {{ item }}
+          loop: "{{ gnome_extensions }}"
+          when: extension_install is changed
+
+        # Configurer les polices et icônes
+        - name: Réduire la taille des polices et icônes
+          ansible.builtin.command: >
+            gsettings set org.gnome.desktop.interface font-name 'Cantarell {{ gnome_font_size }}'
+          changed_when: false
+
+        - name: Réduire la taille des icônes
+          ansible.builtin.command: >
+            gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'
+          changed_when: false
+
+        - name: Désactiver les animations
+          ansible.builtin.command: >
+            gsettings set org.gnome.desktop.interface enable-animations false
+          changed_when: false
+
+        # Optimiser Dash to Panel (si installé)
+        - name: Configurer Dash to Panel pour un écran 14"
+          ansible.builtin.command: >
+            gsettings set org.gnome.shell.extensions.dash-to-panel panel-size 32
+          when: "'1160@mpdeimos.com' in gnome_extensions"
+          changed_when: false
+
+        # Redémarrer GNOME Shell (pour appliquer les changements)
+        - name: Redémarrer GNOME Shell
+          ansible.builtin.command: >
+            gnome-shell --replace &
+          async: 1
+          poll: 0
+          when: ansible_facts['window_manager'] == "gnome-shell"

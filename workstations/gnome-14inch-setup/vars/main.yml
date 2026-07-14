@@ -1,0 +1,29 @@
+---
+# Variables pour Fedora/OpenSUSE
+system_packages:
+  - wget
+  - curl
+  - bind-utils
+  - net-tools
+  - zip
+  - unzip
+  - git
+  - htop
+  - neofetch
+  - gnome-tweaks
+  - gnome-extensions-app
+  - flatpak
+  - fwupd
+
+# Extensions GNOME recommandées (IDs depuis extensions.gnome.org)
+gnome_extensions:
+  - "1160@mpdeimos.com"  # Dash to Panel
+  - "3628@arcmenu.com"   # ArcMenu
+  - "3193@blur-my-shell" # Blur My Shell
+  - "5090@space-bar"     # Space Bar
+
+# Configuration GNOME
+gnome_font_size: 10
+gnome_icon_size: 16
+gnome_theme: "Adwaita"
+gnome_shell_theme: "Adwaita"
