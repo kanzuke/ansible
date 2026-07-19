@@ -1,0 +1,159 @@
+---
+- name: Installer et configurer ZeroTier sur Linux
+  hosts: localhost
+  connection: local
+  become: yes
+  vars_prompt:
+    - name: zerotier_network_id
+      prompt: "Entrez l'ID du réseau ZeroTier à rejoindre (ex: 8056c34xxxxxxxxxx)"
+      private: no
+
+  vars:
+    zerotier_package_version: "1.12.2"  # Version stable à jour
+    zerotier_download_url: "https://download.zerotier.com/dist/{{ zerotier_package_version }}/ZeroTier-One-{{ zerotier_package_version }}.zip"
+
+    # Mappings pour les architectures
+    zerotier_arch_map:
+      x86_64: x64
+      aarch64: arm64
+      armv7l: armhf
+      armv6l: arm
+
+    # Distributions supportées
+    supported_distributions:
+      - Debian
+      - Ubuntu
+      - Raspbian
+      - Fedora
+      - AlmaLinux
+
+    # Commande de jointure réseau
+    zerotier_join_cmd: "zerotier-cli join {{ zerotier_network_id }}"
+
+  tasks:
+    - name: Vérifier la distribution cible
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] in supported_distributions
+        fail_msg: "❌ Distribution non supportée: {{ ansible_facts['distribution'] }}. Ce playbook supporte uniquement Debian, Ubuntu, Raspbian, Fedora et AlmaLinux."
+        success_msg: "✅ Système compatible: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+
+    - name: Détecter l'architecture
+      ansible.builtin.set_fact:
+        zerotier_arch: "{{ zerotier_arch_map.get(ansible_facts['architecture'], 'x64') }}"
+
+    ###########################################################################
+    # Dépendances
+    ###########################################################################
+    - name: Installer les dépendances (Debian/Ubuntu/Raspbian)
+      ansible.builtin.apt:
+        name:
+          - curl
+          - unzip
+          - dkms
+          - linux-headers-{{ ansible_facts['kernel'] }}
+        state: present
+        update_cache: yes
+      when: ansible_facts['distribution'] in ['Debian', 'Ubuntu', 'Raspbian']
+
+    - name: Installer les dépendances (Fedora/AlmaLinux)
+      ansible.builtin.dnf:
+        name:
+          - curl
+          - unzip
+          - dkms
+          - kernel-devel
+        state: present
+      when: ansible_facts['distribution'] in ['Fedora', 'AlmaLinux']
+
+    ###########################################################################
+    # Téléchargement et installation de ZeroTier
+    ###########################################################################
+    - name: Télécharger ZeroTier One
+      ansible.builtin.get_url:
+        url: "{{ zerotier_download_url }}"
+        dest: "/tmp/ZeroTier-{{ zerotier_package_version }}.zip"
+        mode: '0755'
+
+    - name: Extraire ZeroTier
+      ansible.builtin.unarchive:
+        src: "/tmp/ZeroTier-{{ zerotier_package_version }}.zip"
+        dest: /tmp/
+        remote_src: yes
+
+    - name: Installer ZeroTier (Debian/Ubuntu/Raspbian)
+      ansible.builtin.apt:
+        deb: "/tmp/ZeroTier-One_{{ zerotier_package_version }}_{{ zerotier_arch }}.deb"
+      when: ansible_facts['distribution'] in ['Debian', 'Ubuntu', 'Raspbian']
+
+    - name: Installer ZeroTier (Fedora/AlmaLinux)
+      ansible.builtin.dnf:
+        name: "/tmp/ZeroTier-One_{{ zerotier_package_version }}_{{ zerotier_arch }}.rpm"
+        state: present
+      when: ansible_facts['distribution'] in ['Fedora', 'AlmaLinux']
+
+    - name: Nettoyer les fichiers temporaires
+      ansible.builtin.file:
+        path: "/tmp/ZeroTier-{{ zerotier_package_version }}.zip"
+        state: absent
+
+    - name: Nettoyer les fichiers temporaires
+      ansible.builtin.file:
+        path: "/tmp/ZeroTier-One_{{ zerotier_package_version }}_{{ zerotier_arch }}.deb"
+        state: absent
+      when: ansible_facts['distribution'] in ['Debian', 'Ubuntu', 'Raspbian']
+
+    - name: Nettoyer les fichiers temporaires
+      ansible.builtin.file:
+        path: "/tmp/ZeroTier-One_{{ zerotier_package_version }}_{{ zerotier_arch }}.rpm"
+        state: absent
+      when: ansible_facts['distribution'] in ['Fedora', 'AlmaLinux']
+
+    ###########################################################################
+    # Démarrage du service ZeroTier
+    ###########################################################################
+    - name: Démarrer et activer le service ZeroTier
+      ansible.builtin.service:
+        name: zerotier-one
+        state: started
+        enabled: yes
+
+    - name: Vérifier que ZeroTier est démarré
+      ansible.builtin.wait_for:
+        path: /var/lib/zerotier-one/zerotier-one.pid
+        delay: 2
+        timeout: 30
+
+    ###########################################################################
+    # Joindre le réseau ZeroTier
+    ###########################################################################
+    - name: Joindre le réseau ZeroTier
+      ansible.builtin.command: "{{ zerotier_join_cmd }}"
+      register: join_result
+      changed_when: "'OK' in join_result.stdout"
+      until: "'OK' in join_result.stdout"
+      retries: 3
+      delay: 5
+
+    - name: Vérifier le statut de connexion
+      ansible.builtin.command: zerotier-cli listnetworks
+      register: network_status
+      changed_when: false
+
+    - name: Afficher les réseaux ZeroTier actifs
+      ansible.builtin.debug:
+        msg: |
+          ✅ ZeroTier installé et configuré avec succès !
+          Réseau {{ zerotier_network_id }} ajouté.
+
+          Liste des réseaux ZeroTier actifs:
+          {{ network_status.stdout }}
+
+          Pour autoriser ce nœud dans le réseau ZeroTier:
+          1. Connectez-vous à https://my.zerotier.com
+          2. Allez dans "Networks" > "{{ zerotier_network_id }}"
+          3. Autorisez le nouveau nœud dans la liste
+
+    - name: Afficher la commande pour autoriser le nœud
+      ansible.builtin.debug:
+        msg: "Commande pour autoriser ce nœud: zerotier-cli allow {{ zerotier_network_id }} <node-id>"
