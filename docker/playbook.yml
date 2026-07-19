@@ -1,36 +1,62 @@
 ---
-- name: Installer Docker sur AlmaLinux ou Debian (localhost)
+- name: Installer Docker sur Linux (localhost)
   hosts: localhost
   connection: local
   become: yes
+
   vars:
     docker_compose_version: "latest"
-    docker_arch: "{{ ansible_facts['architecture'] }}"
-    docker_release: "bookworm"  # Utilisé par défaut pour Debian 13 (Trixie)
+
+    rpm_distributions:
+      - AlmaLinux
+      - Fedora
+
+    apt_distributions:
+      - Debian
+      - Ubuntu
+
+    docker_repo:
+      AlmaLinux: centos
+      Fedora: fedora
+
+    docker_arch_map:
+      x86_64: amd64
+      aarch64: arm64
+
+    docker_arch: "{{ docker_arch_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
 
   tasks:
+
     - name: Vérifier la distribution cible
       ansible.builtin.assert:
         that:
-          - ansible_facts['distribution'] in ["AlmaLinux", "Debian"]
-        fail_msg: "Ce playbook supporte uniquement AlmaLinux ou Debian"
+          - ansible_facts['distribution'] in rpm_distributions + apt_distributions
+        fail_msg: "Ce playbook supporte uniquement AlmaLinux, Fedora, Debian et Ubuntu."
         success_msg: "Système compatible : {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
 
-    - name: Mettre à jour les paquets (AlmaLinux)
-      dnf:
+    ###########################################################################
+    # Mise à jour du système
+    ###########################################################################
+
+    - name: Mettre à jour les paquets (AlmaLinux/Fedora)
+      ansible.builtin.dnf:
         name: "*"
         state: latest
         update_cache: yes
-      when: ansible_facts['distribution'] == "AlmaLinux"
+      when: ansible_facts['distribution'] in rpm_distributions
 
-    - name: Mettre à jour les paquets (Debian)
-      apt:
+    - name: Mettre à jour les paquets (Debian/Ubuntu)
+      ansible.builtin.apt:
         update_cache: yes
         upgrade: dist
-      when: ansible_facts['distribution'] == "Debian"
+      when: ansible_facts['distribution'] in apt_distributions
 
-    - name: Installer les dépendances nécessaires (AlmaLinux)
-      dnf:
+    ###########################################################################
+    # Dépendances
+    ###########################################################################
+
+    - name: Installer les dépendances nécessaires (AlmaLinux/Fedora)
+      ansible.builtin.dnf:
         name:
           - ca-certificates
           - curl
@@ -41,10 +67,10 @@
           - gcc
           - git
         state: present
-      when: ansible_facts['distribution'] == "AlmaLinux"
+      when: ansible_facts['distribution'] in rpm_distributions
 
-    - name: Installer les dépendances nécessaires (Debian)
-      apt:
+    - name: Installer les dépendances nécessaires (Debian/Ubuntu)
+      ansible.builtin.apt:
         name:
           - ca-certificates
           - curl
@@ -55,51 +81,57 @@
           - gcc
           - git
         state: present
-      when: ansible_facts['distribution'] == "Debian"
+      when: ansible_facts['distribution'] in apt_distributions
 
-    - name: Ajouter la clé GPG Docker (AlmaLinux)
+    ###########################################################################
+    # Clés GPG Docker
+    ###########################################################################
+
+    - name: Ajouter la clé GPG Docker (AlmaLinux/Fedora)
       ansible.builtin.rpm_key:
         state: present
         key: https://download.docker.com/linux/centos/gpg
-      when: ansible_facts['distribution'] == "AlmaLinux"
+      when: ansible_facts['distribution'] in rpm_distributions
 
-    - name: Télécharger la clé GPG Docker (Debian) - Méthode moderne
+    - name: Télécharger la clé GPG Docker (Debian/Ubuntu)
       ansible.builtin.get_url:
-        url: https://download.docker.com/linux/debian/gpg
+        url: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
         dest: /usr/share/keyrings/docker.asc
-        mode: '0644'
-      when: ansible_facts['distribution'] == "Debian"
+        mode: "0644"
+      when: ansible_facts['distribution'] in apt_distributions
 
-    - name: Ajouter le dépôt Docker CE (AlmaLinux)
+    ###########################################################################
+    # Dépôts Docker
+    ###########################################################################
+
+    - name: Ajouter le dépôt Docker CE (AlmaLinux/Fedora)
       ansible.builtin.yum_repository:
         name: docker-ce
         description: Docker CE Repository
-        baseurl: https://download.docker.com/linux/centos/$releasever/$basearch/stable
-        gpgcheck: yes
-        gpgkey: https://download.docker.com/linux/centos/gpg
+        baseurl: "https://download.docker.com/linux/{{ docker_repo[ansible_facts['distribution']] }}/$releasever/$basearch/stable"
         enabled: yes
-      when: ansible_facts['distribution'] == "AlmaLinux"
+        gpgcheck: yes
+        gpgkey: "https://download.docker.com/linux/{{ docker_repo[ansible_facts['distribution']] }}/gpg"
+      when: ansible_facts['distribution'] in rpm_distributions
 
-    - name: Ajouter le dépôt Docker CE (Debian 13/Trixie) - Configuration adaptée
+    - name: Ajouter le dépôt Docker CE (Debian/Ubuntu)
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable"
+        repo: >-
+          deb [arch={{ docker_arch }}
+          signed-by=/usr/share/keyrings/docker.asc]
+          https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}
+          {{ ansible_facts['distribution_release'] }}
+          stable
         state: present
         filename: docker
-      when:
-        - ansible_facts['distribution'] == "Debian"
-        - ansible_facts['distribution_version'] is version('13', '>=')
+      when: ansible_facts['distribution'] in apt_distributions
 
-    - name: Ajouter le dépôt Docker CE (Debian 12/Bookworm) - Fallback
-      ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable"
-        state: present
-        filename: docker
-      when:
-        - ansible_facts['distribution'] == "Debian"
-        - ansible_facts['distribution_version'] is version('13', '<')
+    ###########################################################################
+    # Installation Docker
+    ###########################################################################
 
-    - name: Installer Docker CE et Docker Compose (AlmaLinux)
-      dnf:
+    - name: Installer Docker CE et Docker Compose (AlmaLinux/Fedora)
+      ansible.builtin.dnf:
         name:
           - docker-ce
           - docker-ce-cli
@@ -107,10 +139,10 @@
           - docker-buildx-plugin
           - docker-compose-plugin
         state: latest
-      when: ansible_facts['distribution'] == "AlmaLinux"
+      when: ansible_facts['distribution'] in rpm_distributions
 
-    - name: Installer Docker CE et Docker Compose (Debian)
-      apt:
+    - name: Installer Docker CE et Docker Compose (Debian/Ubuntu)
+      ansible.builtin.apt:
         name:
           - docker-ce
           - docker-ce-cli
@@ -119,7 +151,11 @@
           - docker-compose-plugin
         state: latest
         update_cache: yes
-      when: ansible_facts['distribution'] == "Debian"
+      when: ansible_facts['distribution'] in apt_distributions
+
+    ###########################################################################
+    # Service Docker
+    ###########################################################################
 
     - name: Démarrer et activer le service Docker
       ansible.builtin.service:
@@ -127,25 +163,38 @@
         state: started
         enabled: yes
 
+    ###########################################################################
+    # Groupe docker
+    ###########################################################################
+
     - name: Ajouter l'utilisateur courant au groupe docker
       ansible.builtin.user:
-        name: "{{ ansible_user_id }}"
+        name: "{{ lookup('env', 'SUDO_USER') | default(ansible_facts['user_id'], true) }}"
         groups: docker
         append: yes
+
+    ###########################################################################
+    # Vérifications
+    ###########################################################################
 
     - name: Vérifier l'installation de Docker
       ansible.builtin.command: docker --version
       register: docker_version_output
       changed_when: false
 
-    - name: Vérifier Docker Compose (plugin intégré)
+    - name: Vérifier Docker Compose
       ansible.builtin.command: docker compose version
       register: docker_compose_version_output
       changed_when: false
 
+    ###########################################################################
+    # Résumé
+    ###########################################################################
+
     - name: Afficher les versions installées
       ansible.builtin.debug:
         msg:
-          - "Distribution: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
-          - "Docker version: {{ docker_version_output.stdout }}"
-          - "Docker Compose version: {{ docker_compose_version_output.stdout }}"
+          - "Distribution : {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+          - "Architecture : {{ docker_arch }}"
+          - "Docker : {{ docker_version_output.stdout }}"
+          - "Docker Compose : {{ docker_compose_version_output.stdout }}"
