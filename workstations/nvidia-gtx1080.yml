@@ -1,0 +1,204 @@
+---
+- name: Installer le pilote NVIDIA (GTX 1080) + container toolkit sur Debian 13
+  hosts: localai
+  become: true
+
+  vars:
+    # Pascal n'est plus supporté à partir de la branche 580.
+    max_driver_major: 579
+
+    # Runtime à configurer : docker | podman | none
+    container_runtime: docker
+
+    # Image utilisée pour le test GPU en conteneur (mettre "" pour désactiver)
+    cuda_test_image: "nvidia/cuda:12.4.1-base-ubuntu22.04"
+
+    nvidia_ctk_keyring: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    nvidia_ctk_repo_file: /etc/apt/sources.list.d/nvidia-container-toolkit.sources
+
+  tasks:
+    # ------------------------------------------------------------------
+    # 1. Pré-vérifications
+    # ------------------------------------------------------------------
+    - name: Vérifier que la distribution est Debian 13 (trixie)
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'Debian'
+          - ansible_facts['distribution_release'] == 'trixie'
+        fail_msg: "Ce playbook cible Debian 13 (trixie)."
+
+    - name: Détecter la GTX 1080 (PCI ID 10de:1b80)
+      ansible.builtin.command: lspci -nn -d 10de:1b80
+      register: gpu_check
+      changed_when: false
+      failed_when: gpu_check.stdout | length == 0
+
+    # ------------------------------------------------------------------
+    # 2. Dépôts Debian
+    # ------------------------------------------------------------------
+    - name: Ajouter contrib et non-free aux dépôts Debian
+      ansible.builtin.replace:
+        path: /etc/apt/sources.list
+        regexp: '^(deb(?:-src)?\s+\S+\s+trixie\S*\s+main)(?:\s+non-free-firmware)?\s*$'
+        replace: '\1 contrib non-free non-free-firmware'
+      register: sources_changed
+
+    - name: Mettre à jour le cache apt
+      ansible.builtin.apt:
+        update_cache: true
+      when: sources_changed.changed
+
+    # ------------------------------------------------------------------
+    # 3. Pilote NVIDIA
+    # ------------------------------------------------------------------
+    - name: Interroger la version candidate de nvidia-driver
+      ansible.builtin.shell: >
+        set -o pipefail;
+        apt-cache policy nvidia-driver | awk '/Candidat|Candidate/ {print $2}'
+      args:
+        executable: /bin/bash
+      register: nvidia_candidate
+      changed_when: false
+
+    - name: Vérifier que le candidat existe et supporte Pascal
+      ansible.builtin.assert:
+        that:
+          - nvidia_candidate.stdout not in ['', '(aucun)', '(none)']
+          - (nvidia_candidate.stdout | regex_search('^(?:\d+:)?(\d+)', '\1') | first | int) <= max_driver_major
+        fail_msg: >-
+          Version candidate '{{ nvidia_candidate.stdout }}' absente ou >= 580
+          (Pascal non supporté). Arrêt avant installation.
+        success_msg: "Version candidate {{ nvidia_candidate.stdout }} OK."
+
+    - name: Installer les en-têtes noyau, le pilote et le firmware
+      ansible.builtin.apt:
+        name:
+          - linux-headers-amd64
+          - nvidia-driver
+          - firmware-misc-nonfree
+        state: present
+      register: driver_install
+
+    - name: Régénérer l'initramfs (nouveau blacklisté)
+      ansible.builtin.command: update-initramfs -u
+      when: driver_install.changed
+
+    - name: Redémarrer la machine
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+      when: driver_install.changed
+
+    - name: Vérifier que nouveau n'est pas chargé
+      ansible.builtin.shell: "! lsmod | grep -q '^nouveau'"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Tester nvidia-smi
+      ansible.builtin.command: nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+      register: smi
+      changed_when: false
+
+    - name: Afficher le résultat
+      ansible.builtin.debug:
+        msg: "GPU détecté : {{ smi.stdout }}"
+
+    # ------------------------------------------------------------------
+    # 4. NVIDIA Container Toolkit
+    # ------------------------------------------------------------------
+    - name: Installer les prérequis (gnupg, curl, ca-certificates)
+      ansible.builtin.apt:
+        name:
+          - gnupg
+          - curl
+          - ca-certificates
+        state: present
+
+    - name: Télécharger et dé-armorer la clé GPG NVIDIA
+      ansible.builtin.shell: >
+        set -o pipefail;
+        curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
+        | gpg --dearmor -o {{ nvidia_ctk_keyring }}
+      args:
+        executable: /bin/bash
+        creates: "{{ nvidia_ctk_keyring }}"
+
+    - name: Ajouter le dépôt nvidia-container-toolkit (deb822)
+      ansible.builtin.copy:
+        dest: "{{ nvidia_ctk_repo_file }}"
+        mode: "0644"
+        content: |
+          Types: deb
+          URIs: https://nvidia.github.io/libnvidia-container/stable/deb/amd64
+          Suites: /
+          Signed-By: {{ nvidia_ctk_keyring }}
+      register: ctk_repo
+
+    - name: Mettre à jour le cache apt (dépôt NVIDIA)
+      ansible.builtin.apt:
+        update_cache: true
+      when: ctk_repo.changed
+
+    - name: Installer nvidia-container-toolkit
+      ansible.builtin.apt:
+        name: nvidia-container-toolkit
+        state: present
+      register: ctk_install
+
+    # ------------------------------------------------------------------
+    # 5. Configuration du runtime de conteneurs
+    # ------------------------------------------------------------------
+    - name: Configurer le runtime Docker
+      ansible.builtin.command: nvidia-ctk runtime configure --runtime=docker
+      when: container_runtime == 'docker'
+      register: ctk_docker
+      changed_when: ctk_install.changed or ctk_docker.rc == 0
+
+    - name: Redémarrer Docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+      when:
+        - container_runtime == 'docker'
+        - ctk_install.changed
+
+    - name: Générer la spécification CDI (Podman et autres)
+      ansible.builtin.command: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+      when: container_runtime == 'podman'
+      changed_when: true
+
+    - name: Relancer le service CDI refresh
+      ansible.builtin.systemd:
+        name: nvidia-cdi-refresh.path
+        state: restarted
+        daemon_reload: true
+      failed_when: false
+
+    # ------------------------------------------------------------------
+    # 6. Test GPU depuis un conteneur
+    # ------------------------------------------------------------------
+    - name: Tester le GPU dans un conteneur Docker
+      ansible.builtin.command: >
+        docker run --rm --gpus all {{ cuda_test_image }}
+        nvidia-smi --query-gpu=name --format=csv,noheader
+      when:
+        - container_runtime == 'docker'
+        - cuda_test_image | length > 0
+      register: docker_gpu_test
+      changed_when: false
+
+    - name: Tester le GPU dans un conteneur Podman
+      ansible.builtin.command: >
+        podman run --rm --device nvidia.com/gpu=all {{ cuda_test_image }}
+        nvidia-smi --query-gpu=name --format=csv,noheader
+      when:
+        - container_runtime == 'podman'
+        - cuda_test_image | length > 0
+      register: podman_gpu_test
+      changed_when: false
+
+    - name: Afficher le résultat du test conteneur
+      ansible.builtin.debug:
+        msg: >-
+          GPU visible dans le conteneur :
+          {{ (docker_gpu_test.stdout | default(podman_gpu_test.stdout | default('test ignoré'))) }}
