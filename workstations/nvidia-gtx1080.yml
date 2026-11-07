@@ -1,6 +1,7 @@
 ---
 - name: Installer le pilote NVIDIA (GTX 1080) + container toolkit sur Debian 13
-  hosts: localai
+  hosts: localhost
+  connection: local
   become: true
 
   vars:
