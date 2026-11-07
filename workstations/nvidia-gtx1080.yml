@@ -61,15 +61,20 @@
       register: nvidia_candidate
       changed_when: false
 
+    - name: Extraire la version majeure du pilote candidat
+      ansible.builtin.set_fact:
+        nvidia_major: "{{ nvidia_candidate.stdout | regex_replace('^(?:\\d+:)?(\\d+).*$', '\\1') }}"
+      when: nvidia_candidate.stdout not in ['', '(aucun)', '(none)']
+
     - name: Vérifier que le candidat existe et supporte Pascal
       ansible.builtin.assert:
         that:
           - nvidia_candidate.stdout not in ['', '(aucun)', '(none)']
-          - (nvidia_candidate.stdout | regex_search('^(?:\d+:)?(\d+)', '\1') | first | int) <= max_driver_major
+          - nvidia_major | int <= max_driver_major
         fail_msg: >-
           Version candidate '{{ nvidia_candidate.stdout }}' absente ou >= 580
           (Pascal non supporté). Arrêt avant installation.
-        success_msg: "Version candidate {{ nvidia_candidate.stdout }} OK."
+        success_msg: "Version candidate {{ nvidia_candidate.stdout }} (branche {{ nvidia_major }}) OK."
 
     - name: Installer les en-têtes noyau, le pilote et le firmware
       ansible.builtin.apt:
